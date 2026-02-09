@@ -24,7 +24,7 @@ git clone https://github.com/joinmassive/openclaw-clawpod.git ~/.openclaw/skills
 
 ### 2. Credentials
 
-Sign up at [Massive](https://app.joinmassive.com) and purchase a residential proxy plan. Get your proxy credentials from the dashboard and add them to `~/.openclaw/.env` or `~/.openclaw/skills/clawpod/.env`:
+Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan. Get your proxy credentials from the dashboard and add them to `~/.openclaw/.env` or `~/.openclaw/skills/clawpod/.env`:
 
 ```bash
 echo 'MASSIVE_PROXY_USERNAME="your-username"' >> ~/.openclaw/.env
@@ -145,7 +145,7 @@ echo 'MASSIVE_PROXY_PASSWORD="your-password"' >> ~/.openclaw/.env
 ```
 
 **Error: "Proxy authentication failed (407)"**
-> Your credentials are invalid. Check MASSIVE_PROXY_USERNAME and MASSIVE_PROXY_PASSWORD in your .env file. Verify them at [app.joinmassive.com](https://app.joinmassive.com).
+> Your credentials are invalid. Check MASSIVE_PROXY_USERNAME and MASSIVE_PROXY_PASSWORD in your .env file. Verify them at [app.joinmassive.com](https://partners.joinmassive.com/login).
 
 **Error: "Connection timed out"**
 > The proxy or target server didn't respond within the timeout. Retry the request.
@@ -158,4 +158,4 @@ echo 'MASSIVE_PROXY_PASSWORD="your-password"' >> ~/.openclaw/.env
 ## Links
 
 - [Massive](https://joinmassive.com) — Residential proxy network
-- [Massive Portal](https://app.joinmassive.com) — Sign up and manage credentials
+- [Massive Portal](https://partners.joinmassive.com/create-account-clawpod) — Sign up and manage credentials
