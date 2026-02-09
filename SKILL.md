@@ -38,7 +38,7 @@ Each invocation fetches one URL through a residential IP. The response body is i
 
 ## Setup
 
-1. Sign up at [Massive](https://app.joinmassive.com) and purchase a residential proxy plan
+1. Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan
 2. Get your proxy credentials (username + password) from the dashboard
 3. Add to `~/.openclaw/.env` or `~/.openclaw/skills/clawpod/.env`:
 
