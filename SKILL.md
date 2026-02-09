@@ -1,7 +1,9 @@
 ---
 name: clawpod
 description: Fetch web pages through residential proxy IPs with geo-targeting by country, city, state, or zipcode. Powered by the Massive proxy network. Use when the agent needs to access geo-restricted content, avoid IP bans, or fetch pages from specific locations.
-metadata: {"version": "0.1.0", "tags": ["proxy", "residential-proxy", "geo-targeting", "web-fetch", "scraping"]}
+command-dispatch: tool
+command-tool: clawpod
+metadata: {"version": "0.1.0", "tags": ["proxy", "residential-proxy", "geo-targeting", "web-fetch", "scraping"], "openclaw": {"requires": {"bins": ["python3"], "env": ["MASSIVE_PROXY_USERNAME", "MASSIVE_PROXY_PASSWORD"]}, "primaryEnv": "MASSIVE_PROXY_USERNAME"}}
 ---
 
 # ClawPod
@@ -153,4 +155,5 @@ On error:
 - Always check if a URL is accessible without a proxy first. Only use clawpod if you need geo-targeting or the site blocks non-residential IPs.
 - The body is already included in the output. Do NOT use web_fetch or other tools to re-fetch the same URL.
 - Each invocation uses a different residential IP. Re-run to get a new IP.
+- This tool does **NOT** follow HTTP redirects (301, 302, 307, 308). If you receive a 3xx status, check the `Location` header and re-invoke with the new URL.
 - No external dependencies — uses Python standard library only.
