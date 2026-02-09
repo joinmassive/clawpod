@@ -66,7 +66,7 @@ def get_credentials():
         print(json.dumps({
             "error": "Missing Massive proxy credentials",
             "how_to_fix": [
-                "1. Sign up at https://app.joinmassive.com and purchase a residential proxy plan",
+                "1. Sign up at https://partners.joinmassive.com/ and purchase a residential proxy plan",
                 "2. Get your proxy username and password from the dashboard",
                 '3. Add to ~/.openclaw/.env or ~/.openclaw/skills/clawpod/.env:',
                 '   MASSIVE_PROXY_USERNAME="your-username"',
