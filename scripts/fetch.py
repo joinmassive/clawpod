@@ -37,7 +37,7 @@ def _load_env_file(env_path):
 
 
 _skill_dir = Path(__file__).resolve().parent.parent
-_load_env_file(_skill_dir.parent / ".env")   # ~/.openclaw/.env
+_load_env_file(_skill_dir.parent.parent / ".env")   # ~/.openclaw/.env
 _load_env_file(_skill_dir / ".env")           # ~/.openclaw/skills/clawpod/.env
 
 
@@ -49,7 +49,7 @@ PROXY_PORT = 65535
 
 CONNECT_TIMEOUT = 10   # seconds
 READ_TIMEOUT = 30      # seconds
-TOTAL_TIMEOUT = 60     # seconds
+RESPONSE_TIMEOUT = 60     # seconds
 
 MAX_BODY_SIZE = 500 * 1024  # 500 KB
 
@@ -181,9 +181,15 @@ def connect_via_proxy(proxy_host, proxy_port, target_host, target_port, username
         proxy_tls.close()
         raise Exception(f"Proxy CONNECT failed: {status_line}")
 
+    # Extract any leftover bytes after the CONNECT response header
+    header_end = response.index(b"\r\n\r\n") + 4
+    leftover = response[header_end:]
+
     # TLS-in-TLS via MemoryBIO
     incoming = ssl.MemoryBIO()
     outgoing = ssl.MemoryBIO()
+    if leftover:
+        incoming.write(leftover)
     target_ctx = ssl.create_default_context()
     ssl_obj = target_ctx.wrap_bio(incoming, outgoing, server_hostname=target_host)
 
@@ -270,9 +276,9 @@ def read_response(sock):
     # Parse headers
     headers = {}
     for line in header_lines[1:]:
-        if ": " in line:
-            key, _, value = line.partition(": ")
-            headers[key.lower()] = value
+        if ":" in line:
+            key, _, value = line.partition(":")
+            headers[key.lower()] = value.strip()
 
     # Read body
     body = body_start
@@ -349,17 +355,16 @@ def _read_chunked(sock, initial_data):
 # =============================================================================
 def format_body(body_bytes, content_type):
     """Format the response body for JSON output."""
+    # Truncate if needed
+    truncated = len(body_bytes) > MAX_BODY_SIZE
+    if truncated:
+        body_bytes = body_bytes[:MAX_BODY_SIZE]
+
     # Detect binary
     try:
         text = body_bytes.decode("utf-8")
     except UnicodeDecodeError:
         return f"[binary content, {len(body_bytes)} bytes]"
-
-    # Truncate if needed
-    truncated = False
-    if len(body_bytes) > MAX_BODY_SIZE:
-        text = text[:MAX_BODY_SIZE]
-        truncated = True
 
     # Pretty-print JSON responses
     if content_type and "application/json" in content_type:
@@ -388,9 +393,6 @@ def fetch(url, method="GET", extra_headers=None, body=None,
     path = parsed.path or "/"
     if parsed.query:
         path += "?" + parsed.query
-    if parsed.fragment:
-        path += "#" + parsed.fragment
-
     if scheme not in ("http", "https"):
         return {"error": f"Unsupported scheme: {scheme}", "url": url, "status": None}
 
@@ -424,7 +426,7 @@ def fetch(url, method="GET", extra_headers=None, body=None,
             full_url = f"http://{host}:{port}{path}" if port != 80 else f"http://{host}{path}"
             send_request(sock, method, full_url, host, headers, body)
 
-        sock.settimeout(TOTAL_TIMEOUT)
+        sock.settimeout(RESPONSE_TIMEOUT)
         status_code, resp_headers, body_bytes = read_response(sock)
 
         # Format body
