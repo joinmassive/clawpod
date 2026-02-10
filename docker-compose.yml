@@ -1,0 +1,38 @@
+services:
+  clawpod-test:
+    build: .
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+      - /dev/shm:size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 256
+    network_mode: bridge
+
+  openclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile.openclaw
+    env_file: .env
+    ports:
+      - "18789:18789"
+    tmpfs:
+      - /tmp:size=256m
+      - /dev/shm:size=256m
+    volumes:
+      - ./SKILL.md:/home/node/.openclaw/workspace/skills/clawpod/SKILL.md:ro
+      - ./_meta.json:/home/node/.openclaw/workspace/skills/clawpod/_meta.json:ro
+      - openclaw-devices:/home/node/.openclaw/devices
+    init: true
+    environment:
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-clawpod-dev}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan"]
+
+volumes:
+  openclaw-devices:
