@@ -57,6 +57,37 @@
  python3 scripts/fetch.py -u "https://httpbin.org/ip" | python3 -m json.tool > /dev/null && echo "VALID JSON"
  Expect: "VALID JSON" — confirms output is parseable.
 
+ 11. Sticky session — verify same IP across two requests
+
+ python3 scripts/fetch.py -u "https://httpbin.org/ip" --session test123
+ python3 scripts/fetch.py -u "https://httpbin.org/ip" --session test123
+ Expect: Both requests return the same IP in the body. The exit_node.ip should also match.
+
+ 12. Sticky session with TTL and flex mode
+
+ python3 scripts/fetch.py -u "https://httpbin.org/ip" --session flextest --session-ttl 5 --session-mode flex
+ Expect: status: 200, exit_node present. Session should persist through transient errors.
+
+ 13. Device-type targeting — mobile
+
+ python3 scripts/fetch.py -u "https://httpbin.org/ip" --type mobile --country US
+ Expect: status: 200, exit_node.country should be "US". IP should be from a mobile device.
+
+ 14. Device-type targeting — common (desktop)
+
+ python3 scripts/fetch.py -u "https://httpbin.org/ip" --type common
+ Expect: status: 200 with exit_node metadata.
+
+ 15. Exit node headers — verify exit_node in HTTPS response
+
+ python3 scripts/fetch.py -u "https://httpbin.org/ip" --country GB
+ Expect: exit_node object with ip, country ("GB"), timezone, and asn fields.
+
+ 16. Exit node headers — absent for HTTP
+
+ python3 scripts/fetch.py -u "http://httpbin.org/ip"
+ Expect: No exit_node field in the response (exit headers are HTTPS-only).
+
  ---
  What to Look For
 
@@ -67,3 +98,6 @@
  - JSON responses are pretty-printed in the body (test 7)
  - DNS errors produce clean JSON errors, not tracebacks (test 8)
  - HTTP 4xx/5xx are returned as responses, not errors (test 9)
+ - Sticky sessions return the same IP across requests (tests 11 and 12)
+ - Device-type targeting works with geo flags (tests 13 and 14)
+ - exit_node is present for HTTPS but absent for HTTP (tests 15 and 16)
