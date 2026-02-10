@@ -23,7 +23,7 @@ agent-browser install          # downloads bundled Chromium
 
 ### 2. Credentials
 
-Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan. Set your credentials as environment variables:
+Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and get your proxy credentials from the dashboard and set credentials as environment variables:
 
 ```bash
 export MASSIVE_PROXY_USERNAME="your-username"
