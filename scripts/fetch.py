@@ -3,8 +3,8 @@
 ClawPod — Fetch web pages through Massive residential proxy IPs.
 
 Sends HTTP/HTTPS requests through the Massive proxy network with optional
-geo-targeting by country, city, state, or zipcode. Stdlib only — no pip
-dependencies.
+geo-targeting, sticky sessions, and device-type targeting. Stdlib only — no
+pip dependencies.
 """
 
 import argparse
@@ -66,7 +66,7 @@ def get_credentials():
         print(json.dumps({
             "error": "Missing Massive proxy credentials",
             "how_to_fix": [
-                "1. Sign up at https://partners.joinmassive.com/ and purchase a residential proxy plan",
+                "1. Sign up at https://partners.joinmassive.com/create-account-clawpod and purchase a residential proxy plan",
                 "2. Get your proxy username and password from the dashboard",
                 '3. Add to ~/.openclaw/.env or ~/.openclaw/skills/clawpod/.env:',
                 '   MASSIVE_PROXY_USERNAME="your-username"',
@@ -80,16 +80,26 @@ def get_credentials():
 # =============================================================================
 # Proxy username with geo-targeting
 # =============================================================================
-def build_proxy_username(username, country=None, city=None, state=None, zipcode=None):
+def build_proxy_username(username, country=None, city=None, state=None, zipcode=None,
+                         session=None, session_ttl=None, session_mode=None,
+                         device_type=None):
     params = {}
     if country:
         params["country"] = country
     if city:
         params["city"] = city
     if state:
-        params["state"] = state
+        params["subdivision"] = state
     if zipcode:
         params["zipcode"] = zipcode
+    if session:
+        params["session"] = session
+    if session_ttl is not None:
+        params["sessionttl"] = str(session_ttl)
+    if session_mode:
+        params["sessionmode"] = session_mode
+    if device_type:
+        params["type"] = device_type
     if params:
         return username + "?" + urllib.parse.urlencode(params)
     return username
@@ -174,12 +184,38 @@ def connect_via_proxy(proxy_host, proxy_port, target_host, target_port, username
     if status_code == 407:
         proxy_tls.close()
         raise ProxyAuthError("Proxy authentication failed (407). Check MASSIVE_PROXY_USERNAME and MASSIVE_PROXY_PASSWORD.")
+    if status_code == 452:
+        proxy_tls.close()
+        raise Exception("Disallowed content (452): protocol, port, or content conflicts with Massive's content policy")
     if status_code == 502:
         proxy_tls.close()
         raise Exception(f"DNS resolution failed: proxy returned 502 for {target_host}")
+    if status_code == 503:
+        proxy_tls.close()
+        raise Exception("Service unavailable (503): geo-targeting constraints could not be met — try relaxing location parameters")
+    if status_code == 521:
+        proxy_tls.close()
+        raise Exception("No upstream proxy available (521): insufficient capacity for the specified location or ASN")
     if status_code != 200:
         proxy_tls.close()
         raise Exception(f"Proxy CONNECT failed: {status_line}")
+
+    # Parse exit node headers from CONNECT response
+    exit_info = {}
+    for hline in response.split(b"\r\n")[1:]:
+        if not hline:
+            break
+        if b":" in hline:
+            hkey, _, hval = hline.partition(b":")
+            key_lower = hkey.decode().lower()
+            if key_lower == "x-exit-ip":
+                exit_info["ip"] = hval.decode().strip()
+            elif key_lower == "x-exit-country":
+                exit_info["country"] = hval.decode().strip()
+            elif key_lower == "x-exit-timezone":
+                exit_info["timezone"] = hval.decode().strip()
+            elif key_lower == "x-exit-asn":
+                exit_info["asn"] = hval.decode().strip()
 
     # Extract any leftover bytes after the CONNECT response header
     header_end = response.index(b"\r\n\r\n") + 4
@@ -212,7 +248,7 @@ def connect_via_proxy(proxy_host, proxy_port, target_host, target_port, username
     wrapper = _TLSinTLSSocket(ssl_obj, proxy_tls)
     wrapper._incoming = incoming
     wrapper._outgoing = outgoing
-    return wrapper
+    return wrapper, exit_info
 
 
 # =============================================================================
@@ -384,7 +420,9 @@ def format_body(body_bytes, content_type):
 # Main fetch logic
 # =============================================================================
 def fetch(url, method="GET", extra_headers=None, body=None,
-          country=None, city=None, state=None, zipcode=None):
+          country=None, city=None, state=None, zipcode=None,
+          session=None, session_ttl=None, session_mode=None,
+          device_type=None):
     """Fetch a URL through the Massive residential proxy. Returns a result dict."""
     parsed = urllib.parse.urlparse(url)
     scheme = parsed.scheme.lower()
@@ -400,7 +438,9 @@ def fetch(url, method="GET", extra_headers=None, body=None,
         return {"error": "Invalid URL — no host found", "url": url, "status": None}
 
     username, password = get_credentials()
-    proxy_username = build_proxy_username(username, country, city, state, zipcode)
+    proxy_username = build_proxy_username(username, country, city, state, zipcode,
+                                          session, session_ttl, session_mode,
+                                          device_type)
 
     # Build request headers
     headers = {
@@ -414,9 +454,10 @@ def fetch(url, method="GET", extra_headers=None, body=None,
                 headers[key] = value
 
     sock = None
+    exit_info = {}
     try:
         if scheme == "https":
-            sock = connect_via_proxy(PROXY_HOST, PROXY_PORT, host, port, proxy_username, password)
+            sock, exit_info = connect_via_proxy(PROXY_HOST, PROXY_PORT, host, port, proxy_username, password)
             send_request(sock, method, path, host, headers, body)
         else:
             # HTTP: connect to proxy, send request with full URL as path
@@ -438,13 +479,16 @@ def fetch(url, method="GET", extra_headers=None, body=None,
         for key, value in resp_headers.items():
             clean_headers[key] = value
 
-        return {
+        result = {
             "url": url,
             "method": method,
             "status": status_code,
             "headers": clean_headers,
             "body": formatted_body,
         }
+        if exit_info:
+            result["exit_node"] = exit_info
+        return result
 
     except ProxyAuthError as e:
         return {"error": str(e), "url": url, "status": 407}
@@ -485,6 +529,10 @@ def main():
     parser.add_argument("--city", default=None, help="City name for geo-targeting (English)")
     parser.add_argument("--state", default=None, help="State/subdivision code (e.g. CA, TX)")
     parser.add_argument("--zipcode", default=None, help="Zipcode for geo-targeting")
+    parser.add_argument("--session", default=None, help="Sticky session ID (up to 255 chars) — reuse the same exit IP")
+    parser.add_argument("--session-ttl", type=int, default=None, help="Session TTL in minutes (1-240, default: 15)")
+    parser.add_argument("--session-mode", choices=["strict", "flex"], default=None, help="Session error mode: strict (default) rotates on any error, flex tolerates transient errors")
+    parser.add_argument("--type", dest="device_type", default=None, choices=["mobile", "common", "tv"], help="Device type targeting (mobile, common, tv)")
 
     args = parser.parse_args()
 
@@ -497,6 +545,10 @@ def main():
         city=args.city,
         state=args.state,
         zipcode=args.zipcode,
+        session=args.session,
+        session_ttl=args.session_ttl,
+        session_mode=args.session_mode,
+        device_type=args.device_type,
     )
 
     print(json.dumps(result, indent=2, ensure_ascii=False), flush=True)
