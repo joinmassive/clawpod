@@ -1,178 +1,144 @@
 # ClawPod
 
-Fetch web pages through residential proxy IPs via the Massive network. Geo-target by country, city, state, or zipcode. Sticky sessions, device-type targeting, and exit node metadata. Single Python script, zero external dependencies — uses only the Python standard library.
+Browse and fetch web pages through residential proxy IPs via the Massive network. Uses [agent-browser](https://github.com/vercel-labs/agent-browser) (Playwright/Chromium) for full JavaScript rendering, real browser fingerprints, screenshots, and page interaction — all routed through Massive residential proxies.
 
 ---
 
 ## How It Works
 
-1. **You provide a URL** — the target page to fetch
-2. **ClawPod routes through Massive** — sends the request through a residential proxy at `network.joinmassive.com:65535`
-3. **Response returned as JSON** — status code, headers, and full body content
-
-For HTTPS targets, ClawPod establishes a CONNECT tunnel through the proxy, then wraps the connection in SSL. For HTTP targets, it sends the request directly through the proxy.
+1. **You provide a URL** — the target page to browse or fetch
+2. **ClawPod routes through Massive** — launches a headless Chromium browser through a residential proxy at `network.joinmassive.com:65535`
+3. **Content extracted** — full page text, accessibility snapshots, screenshots, or HTML — after JavaScript has rendered
 
 ---
 
 ## Install
 
-### 1. Clone
+### 1. Install agent-browser
 
 ```bash
-git clone https://github.com/joinmassive/openclaw-clawpod.git ~/.openclaw/skills/clawpod
+npm install -g agent-browser
+agent-browser install          # downloads bundled Chromium
 ```
 
 ### 2. Credentials
 
-Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan. Get your proxy credentials from the dashboard and add them to `~/.openclaw/.env` or `~/.openclaw/skills/clawpod/.env`:
+Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan. Set your credentials as environment variables:
 
 ```bash
-echo 'MASSIVE_PROXY_USERNAME="your-username"' >> ~/.openclaw/.env
-echo 'MASSIVE_PROXY_PASSWORD="your-password"' >> ~/.openclaw/.env
+export MASSIVE_PROXY_USERNAME="your-username"
+export MASSIVE_PROXY_PASSWORD="your-password"
 ```
 
 ### 3. Fetch
 
 ```bash
-python3 ~/.openclaw/skills/clawpod/scripts/fetch.py -u "https://httpbin.org/ip"
-```
+# Build proxy URL
+PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
 
-No pip install needed — zero external dependencies.
+# Open page through proxy, get text, close
+agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
+agent-browser get text body
+agent-browser close
+```
 
 ---
 
-## CLI Reference
+## Testing
 
-| Flag | Required | Description |
-|------|----------|-------------|
-| `-u, --url` | Yes | Target URL to fetch |
-| `-m, --method` | No | HTTP method (default: `GET`) |
-| `-H, --header` | No | Extra header as `Key: Value` (repeatable) |
-| `-d, --data` | No | Request body (for POST/PUT) |
-| `--country` | No | ISO 3166-1 alpha-2 country code (e.g. `US`, `GB`, `DE`) |
-| `--city` | No | City name for geo-targeting (English) |
-| `--state` | No | State/subdivision code (e.g. `CA`, `TX`) |
-| `--zipcode` | No | Zipcode for geo-targeting |
-| `--session` | No | Sticky session ID (up to 255 chars) |
-| `--session-ttl` | No | Session TTL in minutes (1-240, default: 15) |
-| `--session-mode` | No | `strict` (default) or `flex` |
-| `--type` | No | Device type: `mobile`, `common`, or `tv` |
+See [DOCKER.md](DOCKER.md) for running the full test suite in an isolated Docker sandbox.
 
 ---
 
 ## Examples
 
 ```bash
+# Build proxy URL (no geo-targeting)
+PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+
 # Basic fetch through residential proxy
-python3 scripts/fetch.py -u "https://httpbin.org/ip"
+agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
+agent-browser get text body
+agent-browser close
 
 # Geo-targeted fetch from Germany
-python3 scripts/fetch.py -u "https://httpbin.org/ip" --country DE
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DDE"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
+agent-browser get text body
+agent-browser close
 
 # Fetch from a specific US city
-python3 scripts/fetch.py -u "https://example.com" --country US --city "New York" --state NY
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DUS%26city%3DNew%20York%26subdivision%3DNY"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser get text body
+agent-browser close
 
-# POST with JSON body
-python3 scripts/fetch.py -u "https://httpbin.org/post" -m POST -d '{"key":"value"}' -H "Content-Type: application/json"
+# Take a screenshot
+PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser screenshot page.png
+agent-browser close
 
-# Fetch with zipcode targeting
-python3 scripts/fetch.py -u "https://example.com" --country US --zipcode 10001
+# Accessibility snapshot (interactive elements)
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser snapshot -i
+agent-browser close
 
-# Sticky session — reuse the same exit IP across requests
-python3 scripts/fetch.py -u "https://httpbin.org/ip" --session mysession1
+# Sticky session — reuse the same exit IP
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fsession%3Dmysession1"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
+agent-browser get text body
+agent-browser open "https://httpbin.org/headers"   # same proxy, same IP
+agent-browser get text body
+agent-browser close
 
-# Sticky session with custom TTL and flex error mode
-python3 scripts/fetch.py -u "https://httpbin.org/ip" --session mysession1 --session-ttl 30 --session-mode flex
-
-# Fetch through a mobile device IP
-python3 scripts/fetch.py -u "https://example.com" --type mobile --country US
+# Mobile device IP in the US
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Ftype%3Dmobile%26country%3DUS"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser get text body
+agent-browser close
 ```
-
----
-
-## Output Format
-
-### Success
-
-```json
-{
-  "url": "https://httpbin.org/ip",
-  "method": "GET",
-  "status": 200,
-  "headers": {
-    "content-type": "application/json",
-    "content-length": "32"
-  },
-  "body": "{\n  \"origin\": \"73.162.45.89\"\n}",
-  "exit_node": {
-    "ip": "73.162.45.89",
-    "country": "US",
-    "timezone": "America/New_York",
-    "asn": "7922"
-  }
-}
-```
-
-The `exit_node` field is included for HTTPS requests and contains metadata about the proxy exit node (IP, country, timezone, ASN). Use it to verify geo-targeting.
-
-### Error
-
-```json
-{
-  "error": "Connection timed out",
-  "url": "https://example.com",
-  "status": null
-}
-```
-
-### Body Handling
-
-- **JSON responses** (`Content-Type: application/json`) are pretty-printed
-- **Large bodies** (>500KB) are truncated with `[truncated — 500KB limit]`
-- **Binary content** (non-UTF-8) is replaced with `[binary content, <N> bytes]`
 
 ---
 
 ## Geo-Targeting
 
-Geo-targeting flags are optional. They control which residential IP location to use.
+Geo-targeting parameters are encoded in the proxy username. See [SKILL.md](SKILL.md) for full details.
 
-| Targeting need | Flags |
-|----------------|-------|
-| Any IP in Germany | `--country DE` |
-| IP in New York City | `--country US --city "New York" --state NY` |
-| IP in a specific US zipcode | `--country US --zipcode 90210` |
-| IP in London | `--country GB --city London` |
-| No geo preference | *(omit all geo flags)* |
+| Parameter | Description | Example values |
+|-----------|-------------|----------------|
+| `country` | ISO 3166-1 alpha-2 country code | `US`, `GB`, `DE`, `FR` |
+| `city` | City name (English) | `New York`, `London`, `Berlin` |
+| `subdivision` | State or subdivision code | `CA`, `TX`, `NY` |
+| `zipcode` | Zipcode | `10001`, `90210` |
 
 **Notes:**
-- `--country` is required when using any other geo flag
-- Geotargeting by country + city is more robust than by zipcode
-- If both `--state` and `--zipcode` are specified, `--city` is ignored
-- Overly narrow constraints may return a 503 — relax parameters if needed
+- `country` is required when using any other geo parameter
+- Country + city is more reliable than zipcode
+- If both `subdivision` and `zipcode` are specified, `city` is ignored
+- Overly narrow constraints may fail — relax parameters if needed
 
 ---
 
 ## Sticky Sessions
 
-Use sticky sessions to route multiple requests through the **same exit IP**. Useful for multi-page scraping or sites that track IP consistency.
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--session` | Session ID (up to 255 chars) | *(none)* |
-| `--session-ttl` | TTL in minutes (1-240) | 15 |
-| `--session-mode` | `strict` or `flex` | `strict` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `session` | Session ID (up to 255 chars) | *(none)* |
+| `sessionttl` | TTL in minutes (1-240) | 15 |
+| `sessionmode` | `strict` or `flex` | `strict` |
 
 - **strict** (default): any proxy error invalidates the session and rotates to a new IP
 - **flex**: tolerates transient errors — session persists until too many consecutive failures
 - TTL is static — expires at creation time + TTL, not extended by subsequent requests
-- Changing `--country` or `--city` creates a different session
 
 ---
 
 ## Device-Type Targeting
-
-Route requests through specific device types using `--type`:
 
 | Value | Description |
 |-------|-------------|
@@ -180,52 +146,35 @@ Route requests through specific device types using `--type`:
 | `common` | Desktop/laptop IPs |
 | `tv` | Smart TV IPs |
 
-Can be combined with geo-targeting: `--type mobile --country US`
-
 ---
 
 ## FAQ & Troubleshooting
 
-**Q: Do I need to install any Python packages?**
-> No. ClawPod uses only the Python standard library. No pip install required.
-
-**Q: What Python version do I need?**
-> Python 3.8 or later.
+**Q: What are the system requirements?**
+> Node.js 18+ and a system that can run Chromium. On Linux, run `agent-browser install --with-deps` to install system dependencies.
 
 **Q: How do I get a new IP?**
-> Each invocation uses a different residential IP automatically, unless you use `--session`. Just re-run the command.
+> Close and reopen the browser: `agent-browser close` then `agent-browser --proxy "$PROXY_URL" open <url>`. Each new daemon session gets a new IP unless you use sticky sessions.
 
 **Q: How do I keep the same IP across requests?**
-> Use `--session myid` with the same session ID. The IP stays the same for 15 minutes by default (adjust with `--session-ttl`).
+> Add a session parameter to the proxy username: `%3Fsession%3Dmyid`. All pages within the same daemon session use the same proxy.
+
+**Q: Why is the first request slow?**
+> The first `open` command launches Chromium (~3-8 seconds). Subsequent `open` commands within the same daemon session are faster.
 
 **Error: "Missing Massive proxy credentials"**
-```bash
-# Add to ~/.openclaw/.env or ~/.openclaw/skills/clawpod/.env
-echo 'MASSIVE_PROXY_USERNAME="your-username"' >> ~/.openclaw/.env
-echo 'MASSIVE_PROXY_PASSWORD="your-password"' >> ~/.openclaw/.env
-```
+> Set `MASSIVE_PROXY_USERNAME` and `MASSIVE_PROXY_PASSWORD` environment variables.
 
-**Error: "Proxy authentication failed (407)"**
-> Your credentials are invalid. Check MASSIVE_PROXY_USERNAME and MASSIVE_PROXY_PASSWORD in your .env file. Verify them at [partners.joinmassive.com](https://partners.joinmassive.com/login).
+**Error: Proxy authentication failed**
+> Credentials are invalid. Verify at [partners.joinmassive.com](https://partners.joinmassive.com/login).
 
-**Error: "Connection timed out"**
-> The proxy or target server didn't respond within the timeout. Retry the request.
-
-**Error: "SSL error"**
-> The target server has SSL issues. This is usually a problem with the target site, not the proxy.
-
-**Error: "Disallowed content (452)"**
-> The protocol, port, or content conflicts with Massive's content policy. Only ports 80/443 are allowed.
-
-**Error: "Service unavailable (503)"**
-> Geo-targeting constraints could not be met. Try relaxing location parameters (e.g. drop `--city` or `--zipcode`).
-
-**Error: "No upstream proxy available (521)"**
-> Insufficient proxy capacity for the specified location or ASN. Try a broader region.
+**Error: Page content empty**
+> The page may need more time to render. Try `agent-browser wait <seconds>` before extracting content.
 
 ---
 
 ## Links
 
+- [agent-browser](https://github.com/vercel-labs/agent-browser) — Playwright/Chromium CLI for AI agents
 - [Massive](https://joinmassive.com) — Residential proxy network
 - [Massive Portal](https://partners.joinmassive.com/create-account-clawpod) — Sign up and manage credentials

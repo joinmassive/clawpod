@@ -1,142 +1,211 @@
 ---
 name: clawpod
-description: Fetch web pages through residential proxy IPs with geo-targeting, sticky sessions, and device-type targeting. Powered by the Massive proxy network. Use when the agent needs to access geo-restricted content, avoid IP bans, or fetch pages from specific locations.
-command-dispatch: tool
-command-tool: clawpod
-metadata: {"version": "0.1.0", "tags": ["proxy", "residential-proxy", "geo-targeting", "web-fetch", "scraping"], "openclaw": {"requires": {"bins": ["python3"], "env": ["MASSIVE_PROXY_USERNAME", "MASSIVE_PROXY_PASSWORD"]}, "primaryEnv": "MASSIVE_PROXY_USERNAME"}}
+description: Browse and fetch web pages through Massive residential proxy IPs with full JS rendering, geo-targeting, sticky sessions, and device-type targeting.
+allowed-tools: Bash(agent-browser:*)
 ---
 
 # ClawPod
 
-Fetch URLs through residential proxy IPs via the Massive network. Not a search engine — you give it a URL, it fetches it through a real residential IP with optional geo-targeting, sticky sessions, and device-type targeting.
-
-### How It Works
-
-1. **You provide a URL** — the target page you need to fetch
-2. **ClawPod routes through Massive** — sends the request through a residential proxy IP
-3. **Response returned as JSON** — status, headers, and full body content
-
-Each invocation fetches one URL through a residential IP. The response body is included directly — no need to re-fetch.
-
----
-
-## When to Use This Skill
-
-**Use clawpod when:**
-- You need to fetch a page from a specific country, city, or region
-- A target site blocks requests from datacenter IPs
-- You need a clean residential IP for web scraping
-- Content is geo-restricted and requires a specific location
-
-**Do NOT use this skill for:**
-- General web search (use serper or web search for that)
-- URLs that are already accessible without a proxy
-- Browsing or exploration — this fetches ONE specific URL
-- Tasks that don't involve fetching web content
-
-**IMPORTANT: The response body is already included in the output. Do NOT use web_fetch, WebFetch, or any other URL-fetching tool to re-fetch the same URL.**
+Browse and fetch web pages through residential proxy IPs via the Massive network. Uses [agent-browser](https://github.com/vercel-labs/agent-browser) (Playwright/Chromium) for full JavaScript rendering, real browser fingerprints, screenshots, and page interaction — all routed through Massive residential proxies.
 
 ---
 
 ## Setup
 
-1. Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan
-2. Get your proxy credentials (username + password) from the dashboard
-3. Add to `~/.openclaw/.env` or `~/.openclaw/skills/clawpod/.env`:
+### 1. Install agent-browser
 
+```bash
+npm install -g agent-browser
+agent-browser install          # downloads bundled Chromium
 ```
-MASSIVE_PROXY_USERNAME="your-username"
-MASSIVE_PROXY_PASSWORD="your-password"
+
+On Linux (including Docker), install system dependencies too:
+
+```bash
+agent-browser install --with-deps
+```
+
+### 2. Add Massive proxy credentials
+
+Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan. Set your credentials as environment variables:
+
+```bash
+export MASSIVE_PROXY_USERNAME="your-username"
+export MASSIVE_PROXY_PASSWORD="your-password"
 ```
 
 ---
 
-## How to Invoke
+## Core Workflow
+
+Every ClawPod task follows this pattern:
+
+### Step 1: Build the proxy URL
+
+Construct a proxy URL with your Massive credentials. The username must be URL-encoded (see [Proxy URL Format](#proxy-url-format) below).
 
 ```bash
-python3 scripts/fetch.py -u "URL" [OPTIONS]
+# No geo-targeting (any residential IP)
+PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
 ```
+
+### Step 2: Open the target page
+
+```bash
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+```
+
+This launches a headless Chromium browser, routes traffic through the Massive proxy, navigates to the URL, and waits for the page to load (including JavaScript rendering).
+
+### Step 3: Extract content
+
+```bash
+# Get the full page text
+agent-browser get text body
+
+# Get an accessibility snapshot (best for structured data)
+agent-browser snapshot -i
+
+# Take a screenshot
+agent-browser screenshot page.png
+
+# Get page HTML
+agent-browser get html
+```
+
+### Step 4: Close when done
+
+```bash
+agent-browser close
+```
+
+**Important:** The `--proxy` flag is a launch-time option. It only takes effect when the browser daemon starts (on the first `open` command). If you need to change the proxy URL (e.g., different geo-targeting), you must `agent-browser close` first, then re-open with the new proxy URL.
+
+---
+
+## Proxy URL Format
+
+Massive encodes geo-targeting, sticky sessions, and device-type parameters in the **proxy username** using query-string syntax:
+
+```
+raw username:   myuser?country=US&city=New York
+```
+
+For the `--proxy` URL, **the username must be percent-encoded** because `?`, `=`, `&`, and spaces are special characters in URLs:
+
+```
+encoded:        myuser%3Fcountry%3DUS%26city%3DNew%20York
+```
+
+Full proxy URL:
+
+```
+https://myuser%3Fcountry%3DUS%26city%3DNew%20York:mypassword@network.joinmassive.com:65535
+```
+
+### Encoding rules
+
+| Character | Encoded | Why |
+|-----------|---------|-----|
+| `?` | `%3F` | Separates username from params |
+| `=` | `%3D` | Separates param key from value |
+| `&` | `%26` | Separates multiple params |
+| ` ` (space) | `%20` | Spaces in city names etc. |
+
+### Building the proxy URL in bash
+
+```bash
+# No geo-targeting
+PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+
+# With geo-targeting — encode the username
+ENCODED_USER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MASSIVE_PROXY_USERNAME}?country=US&city=New York', safe=''))")
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+```
+
+Or encode manually:
+
+```bash
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DUS%26city%3DNew%20York"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+```
+
+---
+
+## Geo-Targeting
+
+Add geo-targeting parameters to the proxy username. All parameters are optional.
+
+| Parameter | Description | Example values |
+|-----------|-------------|----------------|
+| `country` | ISO 3166-1 alpha-2 country code | `US`, `GB`, `DE`, `FR` |
+| `city` | City name (English) | `New York`, `London`, `Berlin` |
+| `subdivision` | State or subdivision code | `CA`, `TX`, `NY` |
+| `zipcode` | Zipcode | `10001`, `90210` |
+
+**Rules:**
+- `country` is required when using any other geo parameter
+- Country + city is more reliable than zipcode
+- If both `subdivision` and `zipcode` are specified, `city` is ignored
+- Overly narrow constraints may fail — relax parameters if needed
 
 ### Examples
 
 ```bash
-# Basic fetch through residential proxy
-python3 scripts/fetch.py -u "https://httpbin.org/ip"
+# Any IP in Germany
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DDE"
 
-# Fetch from a German residential IP
-python3 scripts/fetch.py -u "https://httpbin.org/ip" --country DE
+# IP in New York City
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DUS%26city%3DNew%20York%26subdivision%3DNY"
 
-# Fetch from a specific US city
-python3 scripts/fetch.py -u "https://example.com" --country US --city "New York" --state NY
+# IP in a specific US zipcode
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DUS%26zipcode%3D90210"
 
-# POST with JSON body
-python3 scripts/fetch.py -u "https://httpbin.org/post" -m POST -d '{"key":"value"}' -H "Content-Type: application/json"
-
-# Fetch with zipcode targeting
-python3 scripts/fetch.py -u "https://example.com" --country US --zipcode 10001
-
-# Sticky session — reuse the same exit IP across multiple requests
-python3 scripts/fetch.py -u "https://httpbin.org/ip" --session mysession1
-
-# Sticky session with 30-minute TTL and flex error mode
-python3 scripts/fetch.py -u "https://httpbin.org/ip" --session mysession1 --session-ttl 30 --session-mode flex
-
-# Fetch through a mobile device IP
-python3 scripts/fetch.py -u "https://example.com" --type mobile --country US
+# IP in London
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DGB%26city%3DLondon"
 ```
 
----
-
-## Geo-Targeting Guide
-
-Geo-targeting flags are optional. Use them when you need the request to appear from a specific location.
-
-| Flag | Description | Example |
-|------|-------------|---------|
-| `--country` | ISO 3166-1 alpha-2 country code | `US`, `GB`, `DE`, `FR` |
-| `--city` | City name (English) | `"New York"`, `"London"`, `"Berlin"` |
-| `--state` | State or subdivision code | `CA`, `TX`, `NY` |
-| `--zipcode` | Zipcode | `10001`, `90210` |
-
-**Notes:**
-- `--country` is required when using any other geo flag
-- Geotargeting by country + city is more robust than by zipcode
-- If both `--state` and `--zipcode` are specified, `--city` is ignored
-- Overly narrow constraints may return a 503 — relax parameters if this happens
-
-**Combine flags for precision:**
-
-| Targeting need | Flags |
-|----------------|-------|
-| Any IP in Germany | `--country DE` |
-| IP in New York City | `--country US --city "New York" --state NY` |
-| IP in a specific US zipcode | `--country US --zipcode 90210` |
-| IP in London | `--country GB --city London` |
-| No geo preference (any residential IP) | *(omit all geo flags)* |
+Then use: `PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"`
 
 ---
 
 ## Sticky Sessions
 
-Use sticky sessions to route multiple requests through the **same exit IP**. Useful for multi-page scraping or sites that track IP consistency.
+Route multiple requests through the **same exit IP**. Add session parameters to the proxy username.
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--session` | Session ID (up to 255 chars) | *(none)* |
-| `--session-ttl` | TTL in minutes (1-240) | 15 |
-| `--session-mode` | `strict` or `flex` | `strict` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `session` | Session ID (up to 255 chars) | *(none)* |
+| `sessionttl` | TTL in minutes (1-240) | 15 |
+| `sessionmode` | `strict` or `flex` | `strict` |
 
 **Modes:**
 - **strict** (default): any proxy error invalidates the session and rotates to a new IP
-- **flex**: tolerates transient errors — the session persists until too many consecutive failures
+- **flex**: tolerates transient errors — session persists until too many consecutive failures
 
-**Important:** Session TTL is static — it expires at creation time + TTL, not extended by subsequent requests. Changing `--country` or `--city` creates a different session.
+**Important:** Session TTL is static — expires at creation time + TTL, not extended by subsequent requests. Changing geo parameters creates a different session.
+
+### Example
+
+```bash
+# Sticky session with 30-minute TTL
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fsession%3Dmysession1%26sessionttl%3D30%26sessionmode%3Dflex"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+```
+
+**Important:** Since `--proxy` is a launch-time option, the sticky session is locked for the lifetime of the browser daemon. All pages opened in the same daemon session use the same proxy configuration. To change sessions, close and reopen:
+
+```bash
+agent-browser close
+agent-browser --proxy "$NEW_PROXY_URL" open "https://example.com/page2"
+```
 
 ---
 
 ## Device-Type Targeting
 
-Route requests through specific device types using `--type`:
+Route through specific device types by adding the `type` parameter.
 
 | Value | Description |
 |-------|-------------|
@@ -144,74 +213,100 @@ Route requests through specific device types using `--type`:
 | `common` | Desktop/laptop IPs |
 | `tv` | Smart TV IPs |
 
-Can be combined with geo-targeting: `--type mobile --country US`
+### Example
+
+```bash
+# Mobile IP in the US
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Ftype%3Dmobile%26country%3DUS"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+```
 
 ---
 
-## Output Format
+## Common Patterns
 
-```json
-{
-  "url": "https://httpbin.org/ip",
-  "method": "GET",
-  "status": 200,
-  "headers": {
-    "content-type": "application/json",
-    "content-length": "32"
-  },
-  "body": "{\n  \"origin\": \"73.162.45.89\"\n}",
-  "exit_node": {
-    "ip": "73.162.45.89",
-    "country": "US",
-    "timezone": "America/New_York",
-    "asn": "7922"
-  }
-}
+### Fetch a page and get its text
+
+```bash
+PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser get text body
+agent-browser close
 ```
 
-On error:
+### Fetch a JS-rendered page (SPA)
 
-```json
-{
-  "error": "Connection timed out",
-  "url": "https://example.com",
-  "status": null
-}
+agent-browser renders JavaScript automatically — no special flags needed:
+
+```bash
+agent-browser --proxy "$PROXY_URL" open "https://spa-site.com/dashboard"
+agent-browser snapshot -i          # interactive elements after JS renders
+agent-browser close
 ```
 
-### Body handling
+### Take a screenshot
 
-- JSON responses (`Content-Type: application/json`) are pretty-printed
-- Bodies larger than 500KB are truncated with `[truncated — 500KB limit]`
-- Binary content is replaced with `[binary content, <N> bytes]`
+```bash
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser screenshot page.png
+agent-browser close
+```
 
----
+### Full-page screenshot
 
-## CLI Reference
+```bash
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser screenshot --full fullpage.png
+agent-browser close
+```
 
-| Flag | Required | Description |
-|------|----------|-------------|
-| `-u, --url` | Yes | Target URL to fetch |
-| `-m, --method` | No | HTTP method (default: `GET`) |
-| `-H, --header` | No | Extra header as `Key: Value` (repeatable) |
-| `-d, --data` | No | Request body (for POST/PUT) |
-| `--country` | No | ISO country code for geo-targeting |
-| `--city` | No | City name (English) |
-| `--state` | No | State/subdivision code |
-| `--zipcode` | No | Zipcode for geo-targeting |
-| `--session` | No | Sticky session ID (up to 255 chars) |
-| `--session-ttl` | No | Session TTL in minutes (1-240, default: 15) |
-| `--session-mode` | No | `strict` (default) or `flex` |
-| `--type` | No | Device type: `mobile`, `common`, or `tv` |
+### Extract structured data with accessibility snapshot
+
+```bash
+agent-browser --proxy "$PROXY_URL" open "https://example.com"
+agent-browser snapshot -i -c       # interactive + compact
+agent-browser close
+```
+
+### Verify exit IP and geo-targeting
+
+```bash
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DDE"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
+agent-browser get text body             # should show a German residential IP
+agent-browser close
+```
+
+### Multi-page session (sticky IP)
+
+```bash
+ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fsession%3Dcrawl1%26sessionttl%3D60"
+PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+agent-browser --proxy "$PROXY_URL" open "https://example.com/page1"
+agent-browser get text body
+agent-browser open "https://example.com/page2"    # same proxy, same IP
+agent-browser get text body
+agent-browser close
+```
 
 ---
 
 ## Important Notes
 
-- This tool fetches **ONE URL at a time**. For multiple URLs, call it multiple times.
-- Always check if a URL is accessible without a proxy first. Only use clawpod if you need geo-targeting or the site blocks non-residential IPs.
-- The body is already included in the output. Do NOT use web_fetch or other tools to re-fetch the same URL.
-- Each invocation uses a different residential IP unless `--session` is used. Re-run to get a new IP.
-- This tool does **NOT** follow HTTP redirects (301, 302, 307, 308). If you receive a 3xx status, check the `Location` header and re-invoke with the new URL.
-- For HTTPS requests, the response includes an `exit_node` object with the exit IP, country, timezone, and ASN. Use this to verify geo-targeting worked.
-- No external dependencies — uses Python standard library only.
+- **Credentials required:** `MASSIVE_PROXY_USERNAME` and `MASSIVE_PROXY_PASSWORD` must be set as environment variables.
+- **Browser startup latency:** The first `open` command takes 3-8 seconds as Chromium launches. Subsequent `open` commands within the same session are faster.
+- **Proxy is launch-time only:** The `--proxy` flag only applies when the browser daemon starts. To change proxy settings, `agent-browser close` first, then reopen.
+- **URL encoding is critical:** The proxy username with geo-targeting params must be percent-encoded in the proxy URL. Unencoded `?`, `=`, `&`, or spaces will break the URL.
+- **JS rendering is automatic:** Unlike raw HTTP fetching, agent-browser renders JavaScript, executes the page, and handles redirects and cookies automatically.
+- **Real browser fingerprint:** Requests use a real Chromium browser fingerprint, making them much harder to detect as automated.
+- **One browser at a time:** The agent-browser daemon manages one browser instance. Use `close` between different proxy configurations.
+
+---
+
+## Links
+
+- [agent-browser](https://github.com/vercel-labs/agent-browser) — Playwright/Chromium CLI for AI agents
+- [Massive](https://joinmassive.com) — Residential proxy network
+- [Massive Portal](https://partners.joinmassive.com/create-account-clawpod) — Sign up and manage credentials
