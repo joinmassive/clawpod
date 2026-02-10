@@ -2,6 +2,8 @@
 name: clawpod
 description: Browse and fetch web pages through Massive residential proxy IPs with full JS rendering, geo-targeting, sticky sessions, and device-type targeting.
 allowed-tools: Bash(agent-browser:*)
+homepage: https://partners.joinmassive.com/create-account-clawpod
+metadata: {"openclaw":{"emoji":"🦀","homepage":"https://partners.joinmassive.com/create-account-clawpod","requires":{"bins":["agent-browser"],"env":["MASSIVE_PROXY_USERNAME","MASSIVE_PROXY_PASSWORD"]},"primaryEnv":"MASSIVE_PROXY_USERNAME","install":[{"id":"node","kind":"node","package":"agent-browser","bins":["agent-browser"],"label":"Install agent-browser (npm)"}]}}
 ---
 
 # ClawPod

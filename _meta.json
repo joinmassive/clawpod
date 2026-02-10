@@ -1,6 +1,11 @@
 {
-  "ownerId": "joinmassive",
+  "owner": "joinmassive",
   "slug": "clawpod",
-  "version": "0.0.1",
-  "publishedAt": 1770658521942
+  "displayName": "ClawPod",
+  "latest": {
+    "version": "0.0.1",
+    "publishedAt": 1770658521942,
+    "commit": ""
+  },
+  "history": []
 }

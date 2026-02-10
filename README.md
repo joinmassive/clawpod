@@ -44,12 +44,6 @@ agent-browser close
 
 ---
 
-## Testing
-
-See [DOCKER.md](DOCKER.md) for running the full test suite in an isolated Docker sandbox.
-
----
-
 ## Examples
 
 ```bash
