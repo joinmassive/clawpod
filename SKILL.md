@@ -27,7 +27,7 @@ agent-browser install --with-deps
 
 ### 2. Add Massive proxy credentials
 
-Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and purchase a residential proxy plan. Set your credentials as environment variables:
+Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and get your proxy credentials from the dashboard. Set your credentials as environment variables:
 
 ```bash
 export MASSIVE_PROXY_USERNAME="your-username"
