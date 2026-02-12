@@ -120,14 +120,7 @@ https://myuser%3Fcountry%3DUS%26city%3DNew%20York:mypassword@network.joinmassive
 # No geo-targeting
 PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
 
-# With geo-targeting — encode the username
-ENCODED_USER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MASSIVE_PROXY_USERNAME}?country=US&city=New York', safe=''))")
-PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-```
-
-Or encode manually:
-
-```bash
+# With geo-targeting — percent-encode the username inline
 ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DUS%26city%3DNew%20York"
 PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
 ```
