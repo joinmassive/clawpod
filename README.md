@@ -1,174 +1,141 @@
 # ClawPod
 
-Browse and fetch web pages through residential proxy IPs via the Massive network. Uses [agent-browser](https://github.com/vercel-labs/agent-browser) (Playwright/Chromium) for full JavaScript rendering, real browser fingerprints, screenshots, and page interaction — all routed through Massive residential proxies.
+Fetch and extract web page content through Massive's Unblocker REST API. Handles JavaScript rendering, anti-bot protection, CAPTCHAs, paywalls, and geo-restrictions server-side — returns rendered HTML that can be converted to clean markdown.
 
 ---
 
 ## How It Works
 
-1. **You provide a URL** — the target page to browse or fetch
-2. **ClawPod routes through Massive** — launches a headless Chromium browser through a residential proxy at `network.joinmassive.com:65535`
-3. **Content extracted** — full page text, accessibility snapshots, screenshots, or HTML — after JavaScript has rendered
+1. **You provide a URL** — the target page to fetch
+2. **Unblocker handles the rest** — JS rendering, CAPTCHA solving, retries, and anti-bot bypass all happen server-side
+3. **Content returned** — rendered HTML, optionally converted to markdown via `node-html-markdown`
 
 ---
 
 ## Install
 
-### 1. Install agent-browser
+### 1. Get an API Token
+
+Sign up at [Massive](https://clawpod.joinmassive.com/waitlist) and get your Unblocker API token.
+
+### 2. Set the Token
 
 ```bash
-npm install -g agent-browser
-agent-browser install          # downloads bundled Chromium
-```
-
-### 2. Credentials
-
-Sign up at [Massive](https://partners.joinmassive.com/create-account-clawpod) and get your proxy credentials from the dashboard and set credentials as environment variables:
-
-```bash
-export MASSIVE_PROXY_USERNAME="your-username"
-export MASSIVE_PROXY_PASSWORD="your-password"
+export MASSIVE_UNBLOCKER_TOKEN="your-token"
 ```
 
 ### 3. Fetch
 
 ```bash
-# Build proxy URL
-PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-
-# Open page through proxy, get text, close
-agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
-agent-browser get text body
-agent-browser close
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser"
 ```
+
+### 4. (Optional) HTML to Markdown
+
+If `node-html-markdown` is installed, pipe through it for cleaner output:
+
+```bash
+npm install -g node-html-markdown
+```
+
+```bash
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser" -o /tmp/_page.html && \
+  (node -e "const{NodeHtmlMarkdown}=require('node-html-markdown');console.log(NodeHtmlMarkdown.translate(require('fs').readFileSync('/tmp/_page.html','utf8')))" 2>/dev/null || cat /tmp/_page.html)
+```
+
+If `node-html-markdown` is unavailable, raw HTML is returned — LLMs can parse it directly.
 
 ---
 
 ## Examples
 
 ```bash
-# Build proxy URL (no geo-targeting)
-PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
+# Basic fetch
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser"
 
-# Basic fetch through residential proxy
-agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
-agent-browser get text body
-agent-browser close
+# Skip JS rendering (faster, raw HTML only)
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser?format=raw"
 
-# Geo-targeted fetch from Germany
-ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DDE"
-PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
-agent-browser get text body
-agent-browser close
+# Bypass cache
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser?expiration=0"
 
-# Fetch from a specific US city
-ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fcountry%3DUS%26city%3DNew%20York%26subdivision%3DNY"
-PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-agent-browser --proxy "$PROXY_URL" open "https://example.com"
-agent-browser get text body
-agent-browser close
+# Extra delay for slow-loading dynamic content
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser?delay=3"
 
-# Take a screenshot
-PROXY_URL="https://${MASSIVE_PROXY_USERNAME}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-agent-browser --proxy "$PROXY_URL" open "https://example.com"
-agent-browser screenshot page.png
-agent-browser close
+# Use ISP IPs for less detection
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser?ip=isp"
 
-# Accessibility snapshot (interactive elements)
-agent-browser --proxy "$PROXY_URL" open "https://example.com"
-agent-browser snapshot -i
-agent-browser close
+# Mobile device content
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser?device=mobile"
 
-# Sticky session — reuse the same exit IP
-ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Fsession%3Dmysession1"
-PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-agent-browser --proxy "$PROXY_URL" open "https://httpbin.org/ip"
-agent-browser get text body
-agent-browser open "https://httpbin.org/headers"   # same proxy, same IP
-agent-browser get text body
-agent-browser close
+# Multiple options combined
+curl -s -G --data-urlencode "url=https://example.com" \
+  -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/browser?expiration=0&delay=2&ip=isp"
 
-# Mobile device IP in the US
-ENCODED_USER="${MASSIVE_PROXY_USERNAME}%3Ftype%3Dmobile%26country%3DUS"
-PROXY_URL="https://${ENCODED_USER}:${MASSIVE_PROXY_PASSWORD}@network.joinmassive.com:65535"
-agent-browser --proxy "$PROXY_URL" open "https://example.com"
-agent-browser get text body
-agent-browser close
+# Fetch multiple URLs sequentially
+for url in "https://example.com/page1" "https://example.com/page2"; do
+  echo "=== $url ==="
+  curl -s -G --data-urlencode "url=$url" \
+    -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+    "https://unblocker.joinmassive.com/browser"
+done
 ```
 
 ---
 
-## Geo-Targeting
+## API Parameters
 
-Geo-targeting parameters are encoded in the proxy username. See [SKILL.md](SKILL.md) for full details.
-
-| Parameter | Description | Example values |
-|-----------|-------------|----------------|
-| `country` | ISO 3166-1 alpha-2 country code | `US`, `GB`, `DE`, `FR` |
-| `city` | City name (English) | `New York`, `London`, `Berlin` |
-| `subdivision` | State or subdivision code | `CA`, `TX`, `NY` |
-| `zipcode` | Zipcode | `10001`, `90210` |
-
-**Notes:**
-- `country` is required when using any other geo parameter
-- Country + city is more reliable than zipcode
-- If both `subdivision` and `zipcode` are specified, `city` is ignored
-- Overly narrow constraints may fail — relax parameters if needed
-
----
-
-## Sticky Sessions
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `session` | Session ID (up to 255 chars) | *(none)* |
-| `sessionttl` | TTL in minutes (1-240) | 15 |
-| `sessionmode` | `strict` or `flex` | `strict` |
-
-- **strict** (default): any proxy error invalidates the session and rotates to a new IP
-- **flex**: tolerates transient errors — session persists until too many consecutive failures
-- TTL is static — expires at creation time + TTL, not extended by subsequent requests
-
----
-
-## Device-Type Targeting
-
-| Value | Description |
-|-------|-------------|
-| `mobile` | Mobile device IPs |
-| `common` | Desktop/laptop IPs |
-| `tv` | Smart TV IPs |
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `url` | any URL | *(required)* | Target page to fetch |
+| `format` | `rendered`, `raw` | `rendered` | `raw` skips JS rendering (faster) |
+| `expiration` | `0` to N (days) | `1` | `0` bypasses cache |
+| `delay` | `0.1` to `10` (seconds) | none | Extra wait for dynamic content |
+| `device` | device name string | desktop | Device type for content |
+| `ip` | `residential`, `isp` | `residential` | ISP IPs for less detection |
 
 ---
 
 ## FAQ & Troubleshooting
 
 **Q: What are the system requirements?**
-> Node.js 18+ and a system that can run Chromium. On Linux, run `agent-browser install --with-deps` to install system dependencies.
+> `curl` and an API token. Optionally Node.js for HTML-to-markdown conversion.
 
-**Q: How do I get a new IP?**
-> Close and reopen the browser: `agent-browser close` then `agent-browser --proxy "$PROXY_URL" open <url>`. Each new daemon session gets a new IP unless you use sticky sessions.
+**Q: Why is a request slow?**
+> Requests can take up to 2 minutes. The API handles JS rendering, CAPTCHA solving, and retries server-side.
 
-**Q: How do I keep the same IP across requests?**
-> Add a session parameter to the proxy username: `%3Fsession%3Dmyid`. All pages within the same daemon session use the same proxy.
+**Q: How do I bypass the cache?**
+> Set `expiration=0` in the query string.
 
-**Q: Why is the first request slow?**
-> The first `open` command launches Chromium (~3-8 seconds). Subsequent `open` commands within the same daemon session are faster.
+**Q: The page content looks incomplete.**
+> Try adding `delay=3` (or higher) to give dynamic content more time to render.
 
-**Error: "Missing Massive proxy credentials"**
-> Set `MASSIVE_PROXY_USERNAME` and `MASSIVE_PROXY_PASSWORD` environment variables.
+**Error: 401 Unauthorized**
+> Token is invalid or missing. Verify `MASSIVE_UNBLOCKER_TOKEN` is set correctly.
 
-**Error: Proxy authentication failed**
-> Credentials are invalid. Verify at [partners.joinmassive.com](https://partners.joinmassive.com/login).
-
-**Error: Page content empty**
-> The page may need more time to render. Try `agent-browser wait <seconds>` before extracting content.
+**Error: Empty response**
+> The page may need more time. Add a `delay` parameter. If using `format=raw`, try `format=rendered` instead.
 
 ---
 
 ## Links
 
-- [agent-browser](https://github.com/vercel-labs/agent-browser) — Playwright/Chromium CLI for AI agents
-- [Massive](https://joinmassive.com) — Residential proxy network
-- [Massive Portal](https://partners.joinmassive.com/create-account-clawpod) — Sign up and manage credentials
+- [Massive](https://clawpod.joinmassive.com) — Unblocker API and residential proxy network
+- [OpenClaw Skill](SKILL.md) — Skill definition for AI agent integration

@@ -3,9 +3,9 @@
   "slug": "clawpod",
   "displayName": "ClawPod",
   "latest": {
-    "version": "0.0.1",
-    "publishedAt": 1770813257000,
-    "commit": "ecc270f5d988bbc58d45de1586f04adb9e36aab7"
+    "version": "0.2.0",
+    "publishedAt": 0,
+    "commit": ""
   },
   "history": []
 }
