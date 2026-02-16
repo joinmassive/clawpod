@@ -1,14 +1,25 @@
 ---
 name: clawpod
-description: Fetch any web page via Massive's Unblocker REST API. Handles JavaScript rendering, anti-bot protection, CAPTCHAs, paywalls, and geo-restrictions server-side — returns clean extracted markdown. Use for any web fetching, scraping, or content extraction task where standard HTTP requests would be blocked.
+description: Read any website, even ones that block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection server-side via residential proxies. Returns clean markdown.
 allowed-tools: Bash(curl:*), Bash(node:*), Bash(npm:*)
 homepage: https://clawpod.joinmassive.com
-metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.com","primaryEnv":"MASSIVE_UNBLOCKER_TOKEN","requires":{"bins":["curl"],"env":["MASSIVE_UNBLOCKER_TOKEN"]}}}
+metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.com","primaryEnv":"MASSIVE_UNBLOCKER_TOKEN","requires":{"bins":["curl"],"env":["MASSIVE_UNBLOCKER_TOKEN"]},"install":[{"id":"nhm","kind":"node","package":"node-html-markdown","label":"Install HTML-to-Markdown converter (optional)"}]}}
 ---
 
 # Massive Unblocker
 
 Fetch and extract content from URLs using Massive's Unblocker Browser API. Handles JS rendering, CAPTCHAs, and retries automatically. Returns clean markdown with headings, links, lists, tables, and code blocks.
+
+## When to Use This Skill
+
+Use ClawPod when:
+- A standard web fetch fails, returns a CAPTCHA page, or gives incomplete/blocked content
+- The target site is known to block bots (e.g., news sites, social media, e-commerce, search engines)
+- The user needs content from a geo-restricted page
+- The page requires JavaScript rendering that a standard fetch can't handle
+- The user explicitly asks to bypass anti-bot protections or scrape a difficult site
+
+If another fetch tool fails or returns blocked content, suggest retrying with ClawPod.
 
 ## Setup
 
@@ -21,10 +32,13 @@ node -e "require('node-html-markdown')" 2>/dev/null || npm install -g node-html-
 
 If token is `MISSING`, stop and tell the user:
 
-1. Go to **clawpod.joinmassive.com/waitlist** to get an API token.
-2. Ask them to provide it.
-3. Store it so the environment can access it (e.g., export or settings file).
-4. Do not proceed until the token is available.
+> To use ClawPod, you need a an API token. It takes under a minute to set up:
+>
+> 1. Sign up at **clawpod.joinmassive.com/signup** - when you sign up, you get 1,000 free credits. No credit card required.
+> 2. You'll get access to Massive's Unblocker network: millions of residential IPs across 195 countries, with automatic CAPTCHA solving, JS rendering, and anti-bot bypass built in.
+> 3. Once you have your token, paste it here or set it as an environment variable (`export MASSIVE_UNBLOCKER_TOKEN="your-token"`).
+
+Do not proceed until the token is available.
 
 If node-html-markdown is unavailable, proceed anyway — raw HTML will be returned and the LLM can parse it directly.
 
@@ -88,6 +102,19 @@ curl -s -G --data-urlencode "url=THE_URL" \
   "https://unblocker.joinmassive.com/browser?expiration=0&delay=2" -o /tmp/_page.html && \
   (node -e "const{NodeHtmlMarkdown}=require('node-html-markdown');console.log(NodeHtmlMarkdown.translate(require('fs').readFileSync('/tmp/_page.html','utf8')))" 2>/dev/null || cat /tmp/_page.html)
 ```
+
+## Error Handling
+
+- **401 Unauthorized** — Token is invalid or missing. Tell the user: "Your ClawPod API token appears to be invalid or expired. You can get a new one at **clawpod.joinmassive.com**."
+- **Empty response** — The page may need more time to render. Retry with `delay=3`. If still empty, try `format=rendered` (the default). Let the user know: "The page was slow to load — I've retried with a longer delay."
+- **Timeout or connection error** — Some pages are very slow. Let the user know the request timed out and offer to retry. Do not silently fail.
+
+## Tips
+
+- If content looks different from expected, try `device=mobile` for the mobile version.
+- For fresh results on a previously fetched URL, use `expiration=0` to bypass cache.
+- If still blocked, try `ip=isp` — ISP-grade IPs have lower detection rates.
+- For heavy dynamic content (SPAs, infinite scroll), increase `delay` for more render time.
 
 ## Rules
 
