@@ -1,6 +1,6 @@
 ---
 name: clawpod
-description: Read any website, even ones that block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection server-side via residential proxies. Returns clean markdown.
+description: Read any website or search Google, even when sites block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection server-side via residential proxies. Returns clean markdown or structured JSON.
 allowed-tools: Bash(curl:*), Bash(node:*), Bash(npm:*)
 homepage: https://clawpod.joinmassive.com
 metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.com","primaryEnv":"MASSIVE_UNBLOCKER_TOKEN","requires":{"bins":["curl"],"env":["MASSIVE_UNBLOCKER_TOKEN"]},"install":[{"id":"nhm","kind":"node","package":"node-html-markdown","label":"Install HTML-to-Markdown converter (optional)"}]}}
@@ -8,7 +8,7 @@ metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.co
 
 # Massive Unblocker
 
-Fetch and extract content from URLs using Massive's Unblocker Browser API. Handles JS rendering, CAPTCHAs, and retries automatically. Returns clean markdown with headings, links, lists, tables, and code blocks.
+Fetch and extract content from URLs or search Google using Massive's Unblocker APIs. Handles JS rendering, CAPTCHAs, and retries automatically. Returns clean markdown, raw HTML, or structured JSON.
 
 ## When to Use This Skill
 
@@ -18,8 +18,11 @@ Use ClawPod when:
 - The user needs content from a geo-restricted page
 - The page requires JavaScript rendering that a standard fetch can't handle
 - The user explicitly asks to bypass anti-bot protections or scrape a difficult site
+- The user needs Google search results (organic and paid) as structured data or HTML
+- A built-in web search tool returns incomplete or blocked results
+- The user needs localized or geo-targeted Google search results
 
-If another fetch tool fails or returns blocked content, suggest retrying with ClawPod.
+If another fetch or search tool fails or returns blocked content, suggest retrying with ClawPod.
 
 ## Setup
 
@@ -44,10 +47,16 @@ If node-html-markdown is unavailable, proceed anyway — raw HTML will be return
 
 ## How It Works
 
-Single endpoint. `GET` request. Returns rendered HTML. Pipe through `node-html-markdown` for clean markdown (falls back to raw HTML if unavailable).
+Two endpoints. Both use `GET` requests with the same auth token.
 
+**Browser** — fetch and render any URL, returns HTML (pipe through `node-html-markdown` for markdown):
 ```
 https://unblocker.joinmassive.com/browser?url=<encoded-url>
+```
+
+**Search** — Google search results as HTML or structured JSON:
+```
+https://unblocker.joinmassive.com/search?terms=<encoded-terms>
 ```
 
 Auth header: `Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN`
@@ -82,9 +91,61 @@ for url in "${URLS[@]}"; do
 done
 ```
 
-## Optional Parameters
+## Searching Google
 
-Append to the query string as needed:
+Search endpoint. `GET` request. Returns all organic and paid Google results as HTML or structured JSON.
+
+```
+https://unblocker.joinmassive.com/search?terms=<encoded-terms>
+```
+
+Auth header: `Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN` (same token as browser fetching)
+
+### Basic Search
+
+```bash
+curl -s -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/search?terms=foo+bar+baz&format=json"
+```
+
+Replace `foo+bar+baz` with the search query. Spaces must be replaced with `+` or `%20`.
+
+### Search with Options
+
+```bash
+curl -s -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
+  "https://unblocker.joinmassive.com/search?terms=vpn+comparison&format=json&size=100&offset=20"
+```
+
+### Search Parameters
+
+| Parameter | Required | Values | Default | Use when |
+|-----------|----------|--------|---------|----------|
+| `terms` | yes | search query (`+` for spaces) | — | Always required |
+| `format` | no | `html`, `json` | `html` | Use `json` for structured results |
+| `serps` | no | `1` to `10` | `1` | Need multiple pages of results |
+| `size` | no | `0` to `100` | unset | Control results per page |
+| `offset` | no | `0` to `100` | `0` | Skip initial results |
+| `language` | no | name, ISO code, or Google code | unset | Localize search language |
+| `uule` | no | encoded location string | unset | Geo-target the search location |
+| `expiration` | no | `0` to N (days) | `1` | Set `0` to bypass cache |
+| `subaccount` | no | up to 255 chars | unset | Separate billing |
+
+### JSON Output
+
+When `format=json`, results are returned as structured nested objects with organic results, paid results, and metadata parsed out — no HTML parsing needed.
+
+### Search Tips
+
+- **Always use `format=json`** when possible — it returns structured data that's easier to work with than raw HTML.
+- **Use `size=10`** for a quick overview, `size=100` for comprehensive results.
+- **Use `offset`** to paginate through results beyond the first page.
+- **Use `language`** to get results in a specific language (e.g., `language=es` for Spanish).
+- **Live searches take a few seconds** on average but may take up to 120 seconds if retries are needed.
+
+## Browser Parameters
+
+Append to the `/browser` query string as needed:
 
 | Parameter | Values | Default | Use when |
 |-----------|--------|---------|----------|
@@ -94,7 +155,7 @@ Append to the query string as needed:
 | `device` | device name string | desktop | Need mobile-specific content |
 | `ip` | `residential`, `isp` | `residential` | ISP IPs for less detection |
 
-Example with options:
+Example with browser options:
 
 ```bash
 curl -s -G --data-urlencode "url=THE_URL" \
@@ -121,5 +182,7 @@ curl -s -G --data-urlencode "url=THE_URL" \
 - **One fetch = one result.** The markdown content is in the output. Do not re-fetch the same URL.
 - **URL-encode the target URL.** Always.
 - **Sequential for multiple URLs.** No parallel requests.
-- **2 minute timeout per request.** If a page is slow, it's the API handling retries/CAPTCHAs.
+- **2 minute timeout per request.** If a page or search is slow, it's the API handling retries/CAPTCHAs.
 - **Pipe through node-html-markdown when available.** It converts HTML to clean markdown. If unavailable, raw HTML is returned — the LLM can still parse it.
+- **Use `format=json` for search.** Structured JSON is preferred over HTML for search results.
+- **Form-encode search terms.** Replace spaces with `+` or `%20` in the `terms` parameter.
