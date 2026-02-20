@@ -1,14 +1,14 @@
 ---
 name: clawpod
-description: Read any website or search Google, even when sites block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection server-side via residential proxies. Returns clean markdown or structured JSON.
-allowed-tools: Bash(curl:*), Bash(node:*), Bash(npm:*)
+description: Read any website or search Google, even when sites block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection server-side via residential proxies. Returns HTML or structured JSON.
+allowed-tools: Bash(curl:*)
 homepage: https://clawpod.joinmassive.com
-metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.com","primaryEnv":"MASSIVE_UNBLOCKER_TOKEN","requires":{"bins":["curl"],"env":["MASSIVE_UNBLOCKER_TOKEN"]},"install":[{"id":"nhm","kind":"node","package":"node-html-markdown","label":"Install HTML-to-Markdown converter (optional)"}]}}
+metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.com","primaryEnv":"MASSIVE_UNBLOCKER_TOKEN","requires":{"bins":["curl"],"env":["MASSIVE_UNBLOCKER_TOKEN"]}}}
 ---
 
 # Massive Unblocker
 
-Fetch and extract content from URLs or search Google using Massive's Unblocker APIs. Handles JS rendering, CAPTCHAs, and retries automatically. Returns clean markdown, raw HTML, or structured JSON.
+Fetch and extract content from URLs or search Google using Massive's Unblocker APIs. Handles JS rendering, CAPTCHAs, and retries automatically. Returns HTML or structured JSON.
 
 ## When to Use This Skill
 
@@ -26,16 +26,15 @@ If another fetch or search tool fails or returns blocked content, suggest retryi
 
 ## Setup
 
-Check for the API token and try to set up node-html-markdown:
+Check for the API token:
 
 ```bash
 echo "TOKEN=${MASSIVE_UNBLOCKER_TOKEN:-MISSING}"
-node -e "require('node-html-markdown')" 2>/dev/null || npm install -g node-html-markdown 2>/dev/null || echo "NHM=UNAVAILABLE (will fall back to raw HTML)"
 ```
 
 If token is `MISSING`, stop and tell the user:
 
-> To use ClawPod, you need a an API token. It takes under a minute to set up:
+> To use ClawPod, you need an API token. It takes under a minute to set up:
 >
 > 1. Sign up at **clawpod.joinmassive.com/signup** - when you sign up, you get 1,000 free credits. No credit card required.
 > 2. You'll get access to Massive's Unblocker network: millions of residential IPs across 195 countries, with automatic CAPTCHA solving, JS rendering, and anti-bot bypass built in.
@@ -43,13 +42,11 @@ If token is `MISSING`, stop and tell the user:
 
 Do not proceed until the token is available.
 
-If node-html-markdown is unavailable, proceed anyway — raw HTML will be returned and the LLM can parse it directly.
-
 ## How It Works
 
 Two endpoints. Both use `GET` requests with the same auth token.
 
-**Browser** — fetch and render any URL, returns HTML (pipe through `node-html-markdown` for markdown):
+**Browser** — fetch and render any URL, returns HTML:
 ```
 https://unblocker.joinmassive.com/browser?url=<encoded-url>
 ```
@@ -66,8 +63,7 @@ Auth header: `Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN`
 ```bash
 curl -s -G --data-urlencode "url=THE_URL" \
   -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
-  "https://unblocker.joinmassive.com/browser" -o /tmp/_page.html && \
-  (node -e "const{NodeHtmlMarkdown}=require('node-html-markdown');console.log(NodeHtmlMarkdown.translate(require('fs').readFileSync('/tmp/_page.html','utf8')))" 2>/dev/null || cat /tmp/_page.html)
+  "https://unblocker.joinmassive.com/browser"
 ```
 
 Replace `THE_URL` with the actual URL. `curl --data-urlencode` handles URL-encoding automatically.
@@ -86,8 +82,7 @@ for url in "${URLS[@]}"; do
   echo "=== $url ==="
   curl -s -G --data-urlencode "url=$url" \
     -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
-    "https://unblocker.joinmassive.com/browser" -o /tmp/_page.html && \
-    (node -e "const{NodeHtmlMarkdown}=require('node-html-markdown');console.log(NodeHtmlMarkdown.translate(require('fs').readFileSync('/tmp/_page.html','utf8')))" 2>/dev/null || cat /tmp/_page.html)
+    "https://unblocker.joinmassive.com/browser"
 done
 ```
 
@@ -160,8 +155,7 @@ Example with browser options:
 ```bash
 curl -s -G --data-urlencode "url=THE_URL" \
   -H "Authorization: Bearer $MASSIVE_UNBLOCKER_TOKEN" \
-  "https://unblocker.joinmassive.com/browser?expiration=0&delay=2" -o /tmp/_page.html && \
-  (node -e "const{NodeHtmlMarkdown}=require('node-html-markdown');console.log(NodeHtmlMarkdown.translate(require('fs').readFileSync('/tmp/_page.html','utf8')))" 2>/dev/null || cat /tmp/_page.html)
+  "https://unblocker.joinmassive.com/browser?expiration=0&delay=2"
 ```
 
 ## Error Handling
@@ -183,6 +177,5 @@ curl -s -G --data-urlencode "url=THE_URL" \
 - **URL-encode the target URL.** Always.
 - **Sequential for multiple URLs.** No parallel requests.
 - **2 minute timeout per request.** If a page or search is slow, it's the API handling retries/CAPTCHAs.
-- **Pipe through node-html-markdown when available.** It converts HTML to clean markdown. If unavailable, raw HTML is returned — the LLM can still parse it.
 - **Use `format=json` for search.** Structured JSON is preferred over HTML for search results.
 - **Form-encode search terms.** Replace spaces with `+` or `%20` in the `terms` parameter.
