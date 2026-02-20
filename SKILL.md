@@ -29,7 +29,7 @@ If another fetch or search tool fails or returns blocked content, suggest retryi
 Check for the API token:
 
 ```bash
-echo "TOKEN=${MASSIVE_UNBLOCKER_TOKEN:-MISSING}"
+[ -n "$MASSIVE_UNBLOCKER_TOKEN" ] && echo "TOKEN=SET" || echo "TOKEN=MISSING"
 ```
 
 If token is `MISSING`, stop and tell the user:
@@ -173,7 +173,7 @@ curl -s -G --data-urlencode "url=THE_URL" \
 
 ## Rules
 
-- **One fetch = one result.** The markdown content is in the output. Do not re-fetch the same URL.
+- **One fetch = one result.** The content is in the output. Do not re-fetch the same URL.
 - **URL-encode the target URL.** Always.
 - **Sequential for multiple URLs.** No parallel requests.
 - **2 minute timeout per request.** If a page or search is slow, it's the API handling retries/CAPTCHAs.
