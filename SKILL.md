@@ -1,6 +1,6 @@
 ---
 name: clawpod
-description: Read any website or search Google, even when sites block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection server-side via residential proxies. Returns HTML or structured JSON.
+description: Read any website or search Google, even when sites block bots or are geo-restricted. Handles CAPTCHAs, JavaScript rendering, and anti-bot protection via residential proxies. Use when a standard fetch fails or returns blocked content, when scraping bot-protected sites, or when the user needs geo-targeted search results.
 allowed-tools: Bash(curl:*)
 homepage: https://clawpod.joinmassive.com
 metadata: {"openclaw":{"emoji":"🔓","homepage":"https://clawpod.joinmassive.com","primaryEnv":"MASSIVE_UNBLOCKER_TOKEN","requires":{"bins":["curl"],"env":["MASSIVE_UNBLOCKER_TOKEN"]}}}
